@@ -1,0 +1,42 @@
+name: fetch spl30
+
+on:
+  schedule:
+  - cron: "30 * * * *"
+
+jobs:
+  fetch_push:
+    runs-on: windows-2019
+    steps:
+    - uses: actions/checkout@v2.3.3
+      with:
+        ref: actions
+    - name: fetch
+      shell: powershell # Needs old PowerShell to parse HTML?
+      run: |
+        . .\spl30-crowdfunding.ps1
+    - name: git commit and push
+      shell: powershell
+      run: |
+        git add data/*.txt
+        git config --local user.email "${ENV:GITHUB_ACTOR}@users.noreply.github.com"
+        git config --local user.name "GitHub Actions"
+        git commit -m "actions at $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
+        if ($LASTEXITCODE -eq 1) {
+          # Nothing to commit?
+          exit 0
+        }
+        # Push manually because ad-m/github-push-action is not supported on Windows runners
+        # Workaround for stderr and ErrorActionPreference=Stop https://stackoverflow.com/a/31559585
+        $old_error_action_preference = $ErrorActionPreference
+        try {
+          $ErrorActionPreference = "Continue"
+          git push "https://${ENV:GITHUB_ACTOR}:${ENV:TOKEN}@github.com/${ENV:GITHUB_REPOSITORY}.git" actions 2>&1
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
+        } finally {
+          $ErrorActionPreference = $old_error_action_preference
+        }
+      env:
+        TOKEN: ${{ secrets.GITHUB_TOKEN }}
